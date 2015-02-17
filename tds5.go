@@ -5,7 +5,8 @@ import (
 	//        "github.com/packetbeat/"
 	//"bytes"
 	"encoding/hex"
-	"strconv"
+//	"strconv"
+        "time"
 	//"bytes"
 )
 
@@ -72,32 +73,58 @@ const (
 type Tds5Stream struct {
 	tcpStream *TcpStream
 
-	message *PgsqlMessage
+	requestData [] byte
+	responseData [] byte
+	message *Tds5Message
 }
 
-type Tds5Message {
-        Query          string
-        Size           uint64
-        Fields         []string
-        FieldsFormat   []byte
-        Rows           [][]string
-        NumberOfRows   int
-        NumberOfFields int
-        IsOK           bool
-        IsError        bool
-        ErrorInfo      string
-        ErrorCode      string
-        ErrorSeverity  string
-
-        Direction    uint8
-        Incomplete   bool
-        TcpTuple     TcpTuple
-        CmdlineTuple *CmdlineTuple	
+type Tds5Message struct {
+        reqSqlText string
+	reqTdsToken string
+	respTdsToken string
+	respErrorCode int
+	respErrorInfo string
+	ts time.Time
+	respNumOfRows int
+	reqSize uint64
+	respSize uint64
+	receivedResponse bool
 }
 
 func ParseTds5(pkt *Packet, tcp *TcpStream, dir uint8) {
 
         defer RECOVER("ParseTds5 exception")
+
+        if tcp.tds5Data[dir] == nil {
+                tcp.tds5Data[dir] = &Tds5Stream{
+                        tcpStream: tcp,
+                        requestData:      pkt.payload,
+                        message:   &Tds5Message{ts: pkt.ts},
+                }
+                DEBUG("pgsqldetailed", "New stream created")
+        } else {
+                // concatenate bytes
+		//TODO
+                tcp.tds5Data[dir].requestData = append(tcp.tds5Data[dir].requestData, pkt.payload...)
+                DEBUG("pgsqldetailed", "Len data: %d cap data: %d", len(tcp.tds5Data[dir].requestData), cap(tcp.tds5Data[dir].requestData))
+                if len(tcp.tds5Data[dir].requestData) > TCP_MAX_DATA_IN_STREAM {
+                        DEBUG("pgsql", "Stream data too large, dropping TCP stream")
+                        tcp.tds5Data[dir] = nil
+                        return
+                }
+        }
+
+	tdsToken := pkt.payload[8]
+
+        switch tdsToken {
+        case TDS_LANGUAGE:
+		DEBUG("tds5", "Received a TDS_LANGUAGE token")
+		DEBUG("tds5", "SQLText: " + string(pkt.payload[14:]))
+	case TDS_DBRPC: 
+		DEBUG("tds5", "Received a TDS_DBRPC")
+	default:
+		DEBUG("tds5Test", "type: " + hex.EncodeToString(pkt.payload[8:9]))
+	}
 
         DEBUG("tds5", "### Start Parsing tds5 data stream")
         //bts := pkt.payload
@@ -112,11 +139,12 @@ func ParseTds5(pkt *Packet, tcp *TcpStream, dir uint8) {
         //DEBUG("tds5Test", s)
         //s = hex.EncodeToString(pkt.payload[2:4])
 
-        DEBUG("tds5Test", hex.EncodeToString(pkt.payload[0:]))
-        DEBUG("tds5Test", "type: " + hex.EncodeToString(pkt.payload[8:9]) + " command: " + string(pkt.payload[14:]) + " length: " + strconv.Itoa(int(Bytes_Ntohl(pkt.payload[9:13]))))
+//        DEBUG("tds5Test", hex.EncodeToString(pkt.payload[0:]))
+//        DEBUG("tds5Test", "type: " + hex.EncodeToString(pkt.payload[8:9]) + " command: " + string(pkt.payload[14:]) + " length: " + strconv.Itoa(int(Bytes_Ntohl(pkt.payload[9:13]))))
 
-        if ( pkt.payload[8] == TDS_LANGUAGE ) {
-                DEBUG("tds5Test", "!!!!!!!!!!!!!")
-        }
+ //       if ( pkt.payload[8] == TDS_LANGUAGE ) {
+  //              DEBUG("tds5Test", "!!!!!!!!!!!!!")
+   //     }
+	//TODO: reset der message
         DEBUG("tds5", "### End Parsing tds5 data stream")
 }
