@@ -5,7 +5,7 @@ import (
 	//        "github.com/packetbeat/"
 	//"bytes"
 	"encoding/hex"
-//	"strconv"
+	"strconv"
         "time"
 	//"bytes"
 )
@@ -70,6 +70,13 @@ const (
 	TDS_TABNAME = 0xA4
 )
 
+// rpc options for TDS_DBRPC
+const (
+	TDS_RPC_UNUSED = 0x0000 //no options used
+	TDS_RPC_RECOMPILE = 0x0001 //recompile rpc before execution
+	TDS_RPC_PARAMS = 0x0002 //there are parameters for the rpc
+)
+
 type Tds5Stream struct {
 	tcpStream *TcpStream
 
@@ -122,8 +129,14 @@ func ParseTds5(pkt *Packet, tcp *TcpStream, dir uint8) {
 		DEBUG("tds5", "SQLText: " + string(pkt.payload[14:]))
 	case TDS_DBRPC: 
 		DEBUG("tds5", "Received a TDS_DBRPC")
+		DEBUG("tds5", "Length: " + strconv.Itoa(int(Bytes_Ntohs(pkt.payload[9:11]))))
+		sqlTextLength := int(pkt.payload[11]);
+		DEBUG("tds5", "SQLText Length: " + strconv.Itoa(sqlTextLength) )
+		DEBUG("tds5", "Command: " + string(pkt.payload[12:12+sqlTextLength]))
+		DEBUG("tds5", "TDS Options: 0x" + hex.EncodeToString(pkt.payload[12+sqlTextLength:12+sqlTextLength+2]))
+		DEBUG("tds5Test", "type: " + hex.EncodeToString(pkt.payload[12+sqlTextLength+2:]))
 	default:
-		DEBUG("tds5Test", "type: " + hex.EncodeToString(pkt.payload[8:9]))
+		DEBUG("tds5Test", hex.EncodeToString(pkt.payload[8:9]))
 	}
 
         DEBUG("tds5", "### Start Parsing tds5 data stream")
